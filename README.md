@@ -1,3 +1,19 @@
+---
+license: apache-2.0
+language:
+  - en
+tags:
+  - latent-memory
+  - recursive-language-models
+  - long-context
+  - soft-prompts
+  - qwen3
+base_model: Qwen/Qwen3-1.7B
+datasets:
+  - custom
+pipeline_tag: question-answering
+---
+
 # Latent Pager Memory
 
 **Externalizing Latent States Across Recursive Reads**
