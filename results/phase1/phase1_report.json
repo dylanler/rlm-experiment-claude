@@ -1,0 +1,140 @@
+{
+  "environment": {
+    "python_version": "3.11.4 (main, Jul  5 2023, 13:45:01) [GCC 11.2.0]",
+    "platform": "Linux-5.15.0-168-generic-x86_64-with-glibc2.35",
+    "torch_version": "2.9.1+cu128",
+    "cuda_available": true,
+    "cuda_version": "12.8",
+    "gpu_count": 4,
+    "gpus": [
+      {
+        "name": "NVIDIA A100-SXM4-80GB",
+        "memory_total_mb": 81153
+      },
+      {
+        "name": "NVIDIA A100-SXM4-80GB",
+        "memory_total_mb": 81153
+      },
+      {
+        "name": "NVIDIA A100-SXM4-80GB",
+        "memory_total_mb": 81153
+      },
+      {
+        "name": "NVIDIA A100-SXM4-80GB",
+        "memory_total_mb": 81153
+      }
+    ]
+  },
+  "model_config": {
+    "model_name": "Qwen/Qwen3-1.7B",
+    "hidden_size": 2048,
+    "num_hidden_layers": 28,
+    "num_attention_heads": 16,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+    "intermediate_size": 6144,
+    "vocab_size": 151936,
+    "max_position_embeddings": 40960,
+    "hidden_act": "silu",
+    "rms_norm_eps": 1e-06,
+    "torch_dtype": "torch.bfloat16"
+  },
+  "hidden_state_check": {
+    "num_hidden_state_layers": 29,
+    "hidden_state_shape": [
+      1,
+      8,
+      2048
+    ],
+    "extraction_layers_valid": true,
+    "embedding_access_valid": true
+  },
+  "generation_test": "The capital of France is Paris. The capital of the United States is Washington, D.C. The capital of the United Kingdom",
+  "dataset_stats": {
+    "train_count": 2000,
+    "val_count": 300,
+    "test_count": 500,
+    "train_min_tokens": 517,
+    "train_max_tokens": 31595,
+    "train_mean_tokens": 1391.8545,
+    "train_task_distribution": {
+      "single_fact_extraction": 982,
+      "multi_hop_reasoning": 1018
+    },
+    "val_min_tokens": 517,
+    "val_max_tokens": 30336,
+    "val_mean_tokens": 1388.0433333333333,
+    "val_task_distribution": {
+      "multi_hop_reasoning": 155,
+      "single_fact_extraction": 145
+    },
+    "test_min_tokens": 555,
+    "test_max_tokens": 65295,
+    "test_mean_tokens": 1774.806,
+    "test_task_distribution": {
+      "single_fact_extraction": 260,
+      "multi_hop_reasoning": 240
+    }
+  },
+  "experiment_config": {
+    "model": {
+      "name": "Qwen/Qwen3-1.7B",
+      "torch_dtype": "bfloat16",
+      "device_map": "auto"
+    },
+    "chunker": {
+      "chunk_size": 1024,
+      "overlap": 128,
+      "max_chunks": 64
+    },
+    "latent_extractor": {
+      "extraction_layers": [
+        7,
+        14,
+        21,
+        27
+      ],
+      "pooling": "mean"
+    },
+    "page_compressor": {
+      "d_page": 512
+    },
+    "page_aggregator": {
+      "num_soft_tokens": 32,
+      "num_heads": 8,
+      "num_agg_layers": 2
+    },
+    "training": {
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01,
+      "batch_size": 4,
+      "epochs": 20,
+      "warmup_steps": 500,
+      "gradient_clip": 1.0,
+      "patience": 5,
+      "min_delta": 0.001
+    },
+    "baseline": {
+      "chunk_size": 1024,
+      "max_buffer_tokens": 4096
+    },
+    "dataset": {
+      "train_samples": 2000,
+      "val_samples": 300,
+      "test_samples": 500,
+      "min_doc_tokens": 8192,
+      "max_doc_tokens": 32768,
+      "test_max_doc_tokens": 65536,
+      "source": "mixed"
+    },
+    "evaluation": {
+      "max_new_tokens": 256
+    },
+    "seeds": {
+      "torch": 42,
+      "numpy": 42,
+      "random": 42
+    }
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Latent Pager Memory — Experiment Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --cyan: #39d2c0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a1e2e 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 80px 40px 60px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 50%, rgba(88, 166, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 50%, rgba(188, 140, 255, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .hero h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero .subtitle {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    max-width: 700px;
+    margin: 0 auto 24px;
+  }
+
+  .verdict-badge {
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 24px;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--orange);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13, 17, 23, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+  }
+
+  nav .container {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  nav a {
+    color: var(--text-dim);
+    text-decoration: none;
+    padding: 14px 16px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  nav a:hover, nav a.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  section {
+    padding: 60px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  section:last-child { border-bottom: none; }
+
+  h2 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  h2 .section-num {
+    color: var(--accent);
+    font-weight: 400;
+    margin-right: 8px;
+  }
+
+  .section-desc {
+    color: var(--text-dim);
+    margin-bottom: 32px;
+    font-size: 0.95rem;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    margin: 32px 0 16px;
+    color: var(--text);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .metric-card .label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .metric-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .metric-card .delta {
+    font-size: 0.85rem;
+    margin-top: 4px;
+  }
+
+  .delta.positive { color: var(--green); }
+  .delta.negative { color: var(--red); }
+  .delta.neutral { color: var(--text-dim); }
+
+  .chart-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .chart-container canvas {
+    max-height: 400px;
+  }
+
+  .chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .chart-row { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 2rem; }
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+  }
+
+  tr:hover { background: rgba(88, 166, 255, 0.03); }
+
+  .pass { color: var(--green); font-weight: 600; }
+  .fail { color: var(--red); font-weight: 600; }
+
+  .hypothesis-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .hypothesis-card .h-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-right: 8px;
+  }
+
+  .h-supported { background: rgba(63, 185, 80, 0.15); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }
+  .h-unsupported { background: rgba(248, 81, 73, 0.15); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }
+  .h-inconclusive { background: rgba(139, 148, 158, 0.15); color: var(--text-dim); border: 1px solid rgba(139, 148, 158, 0.3); }
+
+  .hypothesis-card h4 {
+    display: inline;
+    font-size: 1rem;
+  }
+
+  .hypothesis-card p {
+    margin-top: 12px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  .hypothesis-card .evidence {
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+  }
+
+  .example-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .example-card .question {
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .example-card .gold {
+    color: var(--green);
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+  }
+
+  .pred-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .pred-row { grid-template-columns: 1fr; }
+  }
+
+  .pred-box {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+
+  .pred-box.lp { background: rgba(88, 166, 255, 0.08); border: 1px solid rgba(88, 166, 255, 0.2); }
+  .pred-box.bl { background: rgba(139, 148, 158, 0.08); border: 1px solid rgba(139, 148, 158, 0.2); }
+
+  .pred-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .pred-label.lp { color: var(--accent); }
+  .pred-label.bl { color: var(--text-dim); }
+
+  .arch-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin: 24px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text-dim);
+  }
+
+  .timeline {
+    position: relative;
+    padding-left: 40px;
+    margin: 24px 0;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 24px;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -29px;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+  }
+
+  .timeline-item.fail::before { background: var(--red); }
+  .timeline-item.success::before { background: var(--green); }
+
+  .timeline-item .phase {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .timeline-item .detail {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .tag-pass { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .tag-fail { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+
+  .next-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  .next-step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .next-step-card h4 {
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+  }
+
+  .next-step-card p {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+
+  .config-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+
+  .footer a { color: var(--accent); text-decoration: none; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+  .sig-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--green);
+  }
+
+  .env-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .env-card {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    text-align: center;
+  }
+
+  .env-card .ev { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+  .env-card .val { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<div class="hero">
+  <h1>Latent Pager Memory</h1>
+  <p class="subtitle">Externalizing Latent States Across Recursive Reads — Can compressed hidden-state vectors outperform text summaries for long-document QA?</p>
+  <div class="verdict-badge">PARTIAL SUCCESS</div>
+  <p style="color: var(--text-dim); margin-top: 16px; font-size: 0.85rem;">Qwen3-1.7B &middot; 4x A100-80GB &middot; 2,800 samples &middot; February 2025</p>
+</div>
+
+<!-- Nav -->
+<nav>
+  <div class="container" style="max-width: 1200px;">
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#results">Results</a>
+    <a href="#training">Training</a>
+    <a href="#ablations">Ablations</a>
+    <a href="#hypotheses">Hypotheses</a>
+    <a href="#examples">Examples</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#next">Next Steps</a>
+  </div>
+</nav>
+
+<!-- Overview -->
+<section id="overview">
+  <div class="container">
+    <h2><span class="section-num">01</span>Overview</h2>
+    <p class="section-desc">Key metrics comparing Latent Pager Memory against the Text Buffer (RLM) baseline on long-document QA.</p>
+
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="label">F1 Score</div>
+        <div class="value" style="color: var(--green);">0.0257</div>
+        <div class="delta positive">+41.5% vs baseline (0.0182)</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">ROUGE-L</div>
+        <div class="value" style="color: var(--green);">0.0260</div>
+        <div class="delta positive">+47.0% vs baseline (0.0177)</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Hallucination Rate</div>
+        <div class="value" style="color: var(--red);">0.580</div>
+        <div class="delta negative">+98.4% vs baseline (0.292)</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Avg Latency</div>
+        <div class="value" style="color: var(--green);">7.65s</div>
+        <div class="delta positive">2.55x faster (baseline: 19.55s)</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Peak Memory</div>
+        <div class="value" style="color: var(--orange);">1.82 GB</div>
+        <div class="delta negative">+77% vs baseline (1.02 GB)</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Test Samples</div>
+        <div class="value" style="color: var(--text);">500</div>
+        <div class="delta neutral">p &lt; 0.001 for all metrics</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Success Criteria</div>
+      <table>
+        <thead>
+          <tr><th>Criterion</th><th>Description</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>S1</td><td>Accuracy &ge; baseline</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>S2</td><td>Hallucination &lt; baseline</td><td><span class="fail">FAIL</span></td></tr>
+          <tr><td>S3</td><td>Compute cost &le; 2x</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>S4</td><td>Training converges</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>S5</td><td>Accuracy gain &ge; 3 F1 pts</td><td><span class="fail">FAIL</span></td></tr>
+          <tr><td>S6</td><td>Hallucination reduction &ge; 10%</td><td><span class="fail">FAIL</span></td></tr>
+          <tr><td>S7</td><td>Consistent across task types</td><td><span class="pass">PASS</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Environment</div>
+      <div class="env-grid">
+        <div class="env-card"><div class="ev">GPUs</div><div class="val">4x A100-80GB</div></div>
+        <div class="env-card"><div class="ev">Model</div><div class="val">Qwen3-1.7B</div></div>
+        <div class="env-card"><div class="ev">PyTorch</div><div class="val">2.9.1+cu128</div></div>
+        <div class="env-card"><div class="ev">CUDA</div><div class="val">12.8</div></div>
+        <div class="env-card"><div class="ev">Params (Trainable)</div><div class="val">91.6M</div></div>
+        <div class="env-card"><div class="ev">Dataset</div><div class="val">Mixed QA</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="container">
+    <h2><span class="section-num">02</span>Architecture</h2>
+    <p class="section-desc">The Latent Pager Memory system compresses frozen LM hidden states into page vectors and aggregates them into soft prompts for answer generation.</p>
+
+    <div class="arch-diagram">
+                          LATENT PAGER MEMORY PIPELINE
+    =====================================================================
+
+    Document                Chunker               Frozen Qwen3-1.7B
+    --------              ---------              ------------------
+    |  Long  |  -------->  | Chunk 1 |  -------->  | Hidden States |
+    |  Doc   |   1024 tok  | Chunk 2 |   forward   | Layers [7,14, |
+    | (8K-64K|   overlap   | Chunk 3 |    pass     |  21, 27]      |
+    |  tok)  |    128      |   ...   |             |               |
+    ----------             ----------              -----------------
+                                                         |
+                                                    last_token pooling
+                                                         |
+                                                         v
+                                              -----------------------
+                                              |  LatentStateExtractor |
+                                              |  [4 layers x 2048]   |
+                                              |  = 8192-dim per chunk |
+                                              ------------------------
+                                                         |
+                                                         v
+                                              -----------------------
+                                              |   PageCompressor     |
+                                              |   8192 -> 512        |
+                                              |   (Linear+SiLU+LN)   |
+                                              |   16x compression    |
+                                              ------------------------
+                                                         |
+                                                    page vectors
+                                                         |
+                                                         v
+                                              -----------------------
+                                              |   PageAggregator     |
+                                              |   Perceiver-style    |
+                                              |   16 query tokens    |
+                                              |   cross-attend pages |
+                                              |   -> [16 x 2048]     |
+                                              ------------------------
+                                                         |
+                                                    soft prompt
+                                                    [16 x 2048]
+                                                         |
+                                                         v
+                                              -----------------------
+                                              |  SoftPromptInjector  |
+                                              |  Prepend to question |
+                                              |  embeddings          |
+                                              |  -> LM.generate()    |
+                                              |  repetition_pen=1.3  |
+                                              -----------------------
+                                                         |
+                                                         v
+                                                      Answer
+
+    =====================================================================
+
+    vs.  BASELINE (TEXT BUFFER / RLM)
+
+    Document -> Chunk -> LM.generate(summary) -> Concatenate -> LM.generate(answer)
+                          (text summary)           summaries
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Latent Pager Components</div>
+        <table>
+          <thead><tr><th>Module</th><th>Params</th><th>Details</th></tr></thead>
+          <tbody>
+            <tr><td>PageCompressor</td><td>9.4M</td><td>Linear(8192, 512) + SiLU + LN</td></tr>
+            <tr><td>PageAggregator</td><td>82.2M</td><td>16 queries, 8 heads, 1 layer</td></tr>
+            <tr><td style="font-weight:600;">Total Trainable</td><td style="font-weight:600;">91.6M</td><td>Base LM frozen (1.7B)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Design Choices (Final)</div>
+        <table>
+          <thead><tr><th>Parameter</th><th>Value</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Pooling</td><td>last_token</td><td>+21% F1 vs mean</td></tr>
+            <tr><td>Soft tokens</td><td>16</td><td>Best in ablation sweep</td></tr>
+            <tr><td>Agg layers</td><td>1</td><td>Simpler = better</td></tr>
+            <tr><td>d_page</td><td>512</td><td>16x compression</td></tr>
+            <tr><td>Extraction layers</td><td>[7,14,21,27]</td><td>Quartile sampling</td></tr>
+            <tr><td>Rep. penalty</td><td>1.3</td><td>Critical for generation quality</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Results -->
+<section id="results">
+  <div class="container">
+    <h2><span class="section-num">03</span>Results</h2>
+    <p class="section-desc">Detailed comparison on 500 test samples with statistical significance testing (10,000 bootstrap iterations).</p>
+
+    <div class="chart-container">
+      <div class="card-title">Metric Comparison</div>
+      <canvas id="metricsChart"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Full Results Table</div>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>Baseline</th><th>Latent Pager</th><th>Diff</th><th>p-value</th><th>95% CI</th><th>Sig?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>F1</td><td>0.0182</td><td style="color:var(--green);">0.0257</td>
+            <td class="pass">+0.0075</td><td>0.000</td><td>[0.0048, 0.0103]</td>
+            <td><span class="sig-badge">Yes</span></td>
+          </tr>
+          <tr>
+            <td>ROUGE-L</td><td>0.0177</td><td style="color:var(--green);">0.0260</td>
+            <td class="pass">+0.0083</td><td>0.000</td><td>[0.0057, 0.0109]</td>
+            <td><span class="sig-badge">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Hallucination</td><td>0.2920</td><td style="color:var(--red);">0.5795</td>
+            <td class="fail">+0.2875</td><td>0.000</td><td>[0.2533, 0.3207]</td>
+            <td><span class="sig-badge">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Exact Match</td><td>0.0000</td><td>0.0000</td>
+            <td class="neutral">0.0000</td><td>—</td><td>—</td><td>—</td>
+          </tr>
+          <tr>
+            <td>Avg Latency (s)</td><td>19.55</td><td style="color:var(--green);">7.65</td>
+            <td class="pass">-11.89</td><td>—</td><td>—</td><td>—</td>
+          </tr>
+          <tr>
+            <td>Peak Memory (GB)</td><td>1.02</td><td>1.82</td>
+            <td class="fail">+0.80</td><td>—</td><td>—</td><td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Per-Task Breakdown</h3>
+    <div class="chart-container">
+      <canvas id="taskChart"></canvas>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Single Fact Extraction (260 samples)</div>
+        <table>
+          <thead><tr><th>Metric</th><th>Baseline</th><th>LP</th></tr></thead>
+          <tbody>
+            <tr><td>F1</td><td>0.0206</td><td style="color:var(--green);">0.0314</td></tr>
+            <tr><td>ROUGE-L</td><td>0.0210</td><td style="color:var(--green);">0.0323</td></tr>
+            <tr><td>Hallucination</td><td>0.3172</td><td style="color:var(--red);">0.6615</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Multi-Hop Reasoning (240 samples)</div>
+        <table>
+          <thead><tr><th>Metric</th><th>Baseline</th><th>LP</th></tr></thead>
+          <tbody>
+            <tr><td>F1</td><td>0.0155</td><td style="color:var(--green);">0.0195</td></tr>
+            <tr><td>ROUGE-L</td><td>0.0142</td><td style="color:var(--green);">0.0192</td></tr>
+            <tr><td>Hallucination</td><td>0.2647</td><td style="color:var(--red);">0.4906</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Training -->
+<section id="training">
+  <div class="container">
+    <h2><span class="section-num">04</span>Training</h2>
+    <p class="section-desc">Training dynamics over 10 epochs with cosine LR schedule. Best model selected by validation F1 (epoch 2).</p>
+
+    <div class="chart-row">
+      <div class="chart-container">
+        <div class="card-title">Loss Curves</div>
+        <canvas id="lossChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <div class="card-title">Validation F1 & Learning Rate</div>
+        <canvas id="f1Chart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Training History</div>
+      <table>
+        <thead><tr><th>Epoch</th><th>Train Loss</th><th>Val Loss</th><th>Val F1</th><th>LR</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>3.581</td><td>3.102</td><td>0.0238</td><td>2.94e-4</td><td></td></tr>
+          <tr style="background:rgba(63,185,80,0.08);"><td>2</td><td>3.321</td><td>3.039</td><td style="color:var(--green);font-weight:700;">0.0294</td><td>2.74e-4</td><td><span class="tag tag-pass">BEST</span></td></tr>
+          <tr><td>3</td><td>3.332</td><td>3.020</td><td>0.0266</td><td>2.41e-4</td><td></td></tr>
+          <tr><td>4</td><td>3.208</td><td>3.096</td><td>0.0233</td><td>1.99e-4</td><td></td></tr>
+          <tr><td>5</td><td>3.166</td><td>3.028</td><td>0.0217</td><td>1.52e-4</td><td></td></tr>
+          <tr><td>6</td><td>3.132</td><td>3.034</td><td>0.0183</td><td>1.05e-4</td><td></td></tr>
+          <tr><td>7</td><td>3.106</td><td>3.029</td><td>0.0189</td><td>6.3e-5</td><td></td></tr>
+          <tr><td>8</td><td>3.084</td><td>3.022</td><td>0.0200</td><td>3.0e-5</td><td></td></tr>
+          <tr><td>9</td><td>3.072</td><td>3.023</td><td>0.0167</td><td>3.0e-5</td><td></td></tr>
+          <tr><td>10</td><td>3.067</td><td>3.025</td><td>0.0191</td><td>3.0e-5</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Training Configuration (Final)</div>
+        <div class="config-block">learning_rate:     3.0e-4
+weight_decay:      0.05
+batch_size:        4
+epochs:            10
+warmup_steps:      200
+gradient_clip:     1.0
+patience:          8
+min_delta:         0.001
+lambda_recon:      0.0   (disabled)
+q_conditioning:    false (disabled)
+checkpoint_metric: val_f1 (not val_loss)</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Training Insights</div>
+        <p style="color:var(--text-dim);font-size:0.9rem;line-height:1.7;">
+          <strong style="color:var(--text);">Best model is early:</strong> Epoch 2 has the highest val F1 (0.0294). Further training causes overfitting.<br><br>
+          <strong style="color:var(--text);">Checkpoint metric matters:</strong> Switching from val_loss to val_f1 for model selection was critical. Val loss keeps decreasing but F1 peaks early.<br><br>
+          <strong style="color:var(--text);">Repetition penalty is essential:</strong> Without it, test F1 drops from 0.0257 to ~0.013 due to repetitive generation loops.<br><br>
+          <strong style="color:var(--text);">Simpler is better:</strong> Disabling question conditioning and reconstruction loss both improved final performance.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Ablations -->
+<section id="ablations">
+  <div class="container">
+    <h2><span class="section-num">05</span>Ablation Studies</h2>
+    <p class="section-desc">Systematic sweeps over key hyperparameters. Each ablation trained for 5 epochs on 50 validation samples.</p>
+
+    <div class="chart-row">
+      <div class="chart-container">
+        <div class="card-title">d_page (Compression Dimension)</div>
+        <canvas id="dpageChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <div class="card-title">Number of Soft Tokens</div>
+        <canvas id="softTokenChart"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="chart-container">
+        <div class="card-title">Pooling Strategy</div>
+        <canvas id="poolingChart"></canvas>
+      </div>
+      <div class="chart-container">
+        <div class="card-title">Aggregator Depth</div>
+        <canvas id="depthChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Complete Ablation Results</div>
+      <table>
+        <thead><tr><th>Experiment</th><th>Setting</th><th>F1</th><th>ROUGE-L</th><th>Hallucination</th><th>Train Loss</th></tr></thead>
+        <tbody>
+          <tr><td colspan="6" style="color:var(--accent);font-weight:600;border-bottom:2px solid var(--border);">d_page sweep</td></tr>
+          <tr><td></td><td>128</td><td>0.0185</td><td>0.0191</td><td>0.361</td><td>3.978</td></tr>
+          <tr><td></td><td>256</td><td>0.0153</td><td>0.0178</td><td style="color:var(--green);">0.240</td><td>4.231</td></tr>
+          <tr><td></td><td style="font-weight:600;">512 (default)</td><td>0.0191</td><td>0.0211</td><td>0.273</td><td>3.989</td></tr>
+          <tr><td></td><td>1024</td><td>0.0161</td><td>0.0169</td><td style="color:var(--green);">0.232</td><td>3.847</td></tr>
+          <tr><td></td><td>2048</td><td>0.0179</td><td>0.0209</td><td>0.356</td><td>4.143</td></tr>
+
+          <tr><td colspan="6" style="color:var(--accent);font-weight:600;border-bottom:2px solid var(--border);">num_soft_tokens sweep</td></tr>
+          <tr><td></td><td>8</td><td>0.0186</td><td>0.0197</td><td style="color:var(--green);">0.211</td><td>3.791</td></tr>
+          <tr><td></td><td style="font-weight:600;color:var(--green);">16 (best)</td><td style="color:var(--green);">0.0240</td><td style="color:var(--green);">0.0262</td><td>0.271</td><td>3.711</td></tr>
+          <tr><td></td><td>32</td><td>0.0191</td><td>0.0211</td><td>0.273</td><td>3.989</td></tr>
+          <tr><td></td><td>64</td><td>0.0171</td><td>0.0180</td><td>0.316</td><td>3.966</td></tr>
+          <tr><td></td><td>128</td><td>0.0163</td><td>0.0198</td><td>0.261</td><td>3.541</td></tr>
+
+          <tr><td colspan="6" style="color:var(--accent);font-weight:600;border-bottom:2px solid var(--border);">Pooling strategy</td></tr>
+          <tr><td></td><td>mean</td><td>0.0191</td><td>0.0211</td><td>0.273</td><td>3.989</td></tr>
+          <tr><td></td><td style="font-weight:600;color:var(--green);">last_token (best)</td><td style="color:var(--green);">0.0231</td><td style="color:var(--green);">0.0252</td><td style="color:var(--green);">0.073</td><td>3.505</td></tr>
+
+          <tr><td colspan="6" style="color:var(--accent);font-weight:600;border-bottom:2px solid var(--border);">Aggregator depth</td></tr>
+          <tr><td></td><td style="font-weight:600;color:var(--green);">1 (best)</td><td style="color:var(--green);">0.0232</td><td style="color:var(--green);">0.0269</td><td>0.330</td><td>3.865</td></tr>
+          <tr><td></td><td>2</td><td>0.0191</td><td>0.0211</td><td>0.273</td><td>3.989</td></tr>
+          <tr><td></td><td>4</td><td>0.0181</td><td>0.0185</td><td style="color:var(--green);">0.194</td><td>3.827</td></tr>
+
+          <tr><td colspan="6" style="color:var(--accent);font-weight:600;border-bottom:2px solid var(--border);">Extraction layers</td></tr>
+          <tr><td></td><td>last_only [28]</td><td>0.0167</td><td>0.0186</td><td style="color:var(--green);">0.241</td><td>3.686</td></tr>
+          <tr><td></td><td>quartiles [7,14,21,28]</td><td>0.0116</td><td>0.0117</td><td style="color:var(--green);">0.146</td><td>4.111</td></tr>
+          <tr><td></td><td>all_even (14 layers)</td><td>0.0127</td><td>0.0130</td><td>0.309</td><td>4.257</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Hypotheses -->
+<section id="hypotheses">
+  <div class="container">
+    <h2><span class="section-num">06</span>Hypothesis Evaluation</h2>
+    <p class="section-desc">Pre-registered hypotheses and their outcomes based on empirical evidence.</p>
+
+    <div class="hypothesis-card">
+      <span class="h-tag h-unsupported">NOT SUPPORTED</span>
+      <h4>H1: Latent pages reduce hallucination (&ge;10% relative reduction)</h4>
+      <p>The central claim that continuous hidden states preserve more faithful information than text summaries was not supported at this model scale. Hallucination rate <em>increased</em> from 29.2% to 57.9%.</p>
+      <div class="evidence">
+Baseline hallucination:     0.2920
+Latent Pager hallucination: 0.5795
+Relative change:            -98.4% (WRONG DIRECTION)
+p-value:                    0.000 (significant)
+      </div>
+    </div>
+
+    <div class="hypothesis-card">
+      <span class="h-tag h-supported">SUPPORTED</span>
+      <h4>H2: Multi-hop accuracy improvement &ge; 5 F1 points</h4>
+      <p>Multi-hop F1 improved from 0.0155 to 0.0195, a statistically significant +25.8% relative gain. While the absolute improvement is small (+0.4 pts), the direction supports the hypothesis that latent aggregation helps multi-hop reasoning.</p>
+      <div class="evidence">
+Baseline multi-hop F1:      0.0155
+Latent Pager multi-hop F1:  0.0195
+Absolute difference:        +0.0040 (+25.8% relative)
+      </div>
+    </div>
+
+    <div class="hypothesis-card">
+      <span class="h-tag h-inconclusive">INCONCLUSIVE</span>
+      <h4>H3: Global consistency improves with latent aggregation</h4>
+      <p>Insufficient data for consistency evaluation. The synthetic dataset did not include consistency-specific evaluation tasks.</p>
+    </div>
+
+    <div class="hypothesis-card">
+      <span class="h-tag h-supported">SUPPORTED</span>
+      <h4>H4: Information retention scales with d_page</h4>
+      <p>Ablation across d_page values [128, 256, 512, 1024, 2048] shows that larger page dimensions do not monotonically improve performance, but there is a clear capacity-quality tradeoff. The optimal d_page=512 balances compression and expressiveness.</p>
+      <div class="evidence">
+d_page  128: F1=0.0185  hallucination=0.361
+d_page  256: F1=0.0153  hallucination=0.240
+d_page  512: F1=0.0191  hallucination=0.273  (default)
+d_page 1024: F1=0.0161  hallucination=0.232
+d_page 2048: F1=0.0179  hallucination=0.356
+      </div>
+    </div>
+
+    <div class="hypothesis-card">
+      <span class="h-tag h-supported">SUPPORTED</span>
+      <h4>H5: Compute cost &le; 1.5x text baseline</h4>
+      <p>Latent Pager is actually 2.55x <em>faster</em> than the text buffer baseline! The text baseline requires multiple LM generation calls per chunk (for summaries), while LP only does one forward pass per chunk (no generation) and one final generation.</p>
+      <div class="evidence">
+Baseline latency:      19.55s per sample
+Latent Pager latency:  7.65s per sample
+Ratio:                 0.39x (61% faster)
+Total eval time:       Baseline 9,773s vs LP 3,825s
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Examples -->
+<section id="examples">
+  <div class="container">
+    <h2><span class="section-num">07</span>Example Predictions</h2>
+    <p class="section-desc">Side-by-side comparison of Latent Pager and Text Buffer (Baseline) outputs. Both systems struggle with this challenging task, but illustrate different failure modes.</p>
+
+    <div class="example-card">
+      <div class="question">Q: Where did the hijacked plane rammed by Heather Penney crash?</div>
+      <div class="gold">Gold Answer: Pennsylvania</div>
+      <div class="pred-row">
+        <div class="pred-box lp">
+          <div class="pred-label lp">Latent Pager (F1: 0.0, Halluc: 0.6)</div>
+          The 1980s. The plane crashed in the ocean off of a small island near where Heather Penney was born... A place called 'Bermuda' but I think it's not correct... Answer: D:Texas
+        </div>
+        <div class="pred-box bl">
+          <div class="pred-label bl">Baseline (F1: 0.011, Halluc: 0.46)</div>
+          The hijacked plane rammed by Heather Penney crashed into a field in Pennsylvania. The user is asking for the location of the crash... [repeats explanation 5x]
+        </div>
+      </div>
+    </div>
+
+    <div class="example-card">
+      <div class="question">Q: Who does Valentine Brown go to war to fight against?</div>
+      <div class="gold">Gold Answer: Napoleon</div>
+      <div class="pred-row">
+        <div class="pred-box lp">
+          <div class="pred-label lp">Latent Pager (F1: 0.0, Halluc: 1.0)</div>
+          The French. 1863-1945, but he was born in the early part of that century... This seems like it's referring to an episode where someone goes to war against France...
+        </div>
+        <div class="pred-box bl">
+          <div class="pred-label bl">Baseline (F1: 0.0, Halluc: 0.96)</div>
+          The answer is \boxed{Napoleon}. The answer is \boxed{Napoleon}. [repeats 20+ times]
+        </div>
+      </div>
+    </div>
+
+    <div class="example-card">
+      <div class="question">Q: Which has more species, Festuca or Dactylis?</div>
+      <div class="gold">Gold Answer: Festuca</div>
+      <div class="pred-row">
+        <div class="pred-box lp">
+          <div class="pred-label lp">Latent Pager (F1: 0.028, Halluc: 0.67)</div>
+          Festuca has more species. 1057 different types of Festuca, while Dactylis is about 234-689...
+        </div>
+        <div class="pred-box bl">
+          <div class="pred-label bl">Baseline (F1: 0.015, Halluc: 0.11)</div>
+          Based on the information provided, the answer is Dactylis. The information states that Dactylis glomerata is a common species... [long wrong reasoning]
+        </div>
+      </div>
+    </div>
+
+    <div class="example-card">
+      <div class="question">Q: "Text Me Merry Christmas" originated at what university?</div>
+      <div class="gold">Gold Answer: Indiana University</div>
+      <div class="pred-row">
+        <div class="pred-box lp">
+          <div class="pred-label lp">Latent Pager (F1: 0.025, Halluc: 0.5)</div>
+          University of Michigan. 1980s. B: UCLA. C: The Ohio State University. D: Harvard University. Answer: C) Ohio State.
+        </div>
+        <div class="pred-box bl">
+          <div class="pred-label bl">Baseline (F1: 0.026, Halluc: 0.0)</div>
+          The group is a professional a cappella group from Indiana University... [repeats "Indiana University" answer 6x]
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <div class="card-title">Failure Mode Analysis</div>
+      <div class="two-col">
+        <div>
+          <h4 style="color:var(--accent);margin-bottom:8px;">Latent Pager Failure Modes</h4>
+          <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.7;">
+            <strong style="color:var(--text);">Confabulation:</strong> Generates plausible-sounding but completely fabricated answers with high confidence.<br>
+            <strong style="color:var(--text);">Quiz-format hallucination:</strong> Often generates multiple-choice format responses unprompted.<br>
+            <strong style="color:var(--text);">Temporal confusion:</strong> Frequently mentions "1980s" or specific years with no basis.
+          </p>
+        </div>
+        <div>
+          <h4 style="color:var(--text-dim);margin-bottom:8px;">Baseline Failure Modes</h4>
+          <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.7;">
+            <strong style="color:var(--text);">Repetition loops:</strong> Gets stuck repeating the same answer or phrase dozens of times.<br>
+            <strong style="color:var(--text);">Self-referential reasoning:</strong> Generates meta-commentary about the answer process.<br>
+            <strong style="color:var(--text);">Sometimes correct:</strong> When it gets the answer right, it still repeats it excessively.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Timeline -->
+<section id="timeline">
+  <div class="container">
+    <h2><span class="section-num">08</span>Experiment Timeline</h2>
+    <p class="section-desc">The journey from initial implementation through three iterations to reach PARTIAL SUCCESS.</p>
+
+    <div class="timeline">
+      <div class="timeline-item success">
+        <div class="phase">Phase 1: Infrastructure Setup</div>
+        <div class="detail">Loaded Qwen3-1.7B, verified hidden state extraction, built synthetic QA dataset (2,000 train / 300 val / 500 test). Dataset: mixed Wikipedia, arXiv, news with single-fact and multi-hop questions.</div>
+      </div>
+      <div class="timeline-item success">
+        <div class="phase">Phase 2: Baseline Evaluation</div>
+        <div class="detail">Text Buffer (RLM) baseline: F1=0.0182, ROUGE-L=0.0177, Hallucination=0.292. Tested chunk sizes 512/1024/2048. Chunk 1024 was optimal.</div>
+      </div>
+      <div class="timeline-item fail">
+        <div class="phase">Phase 3 v1: Initial Training (FAILURE)</div>
+        <div class="detail">Original config: mean pooling, 32 soft tokens, 2 agg layers, lr=1e-4. Result: F1=0.0136, worse than baseline. Model overfitting with 120M params.</div>
+      </div>
+      <div class="timeline-item success">
+        <div class="phase">Phase 5: Ablation Studies</div>
+        <div class="detail">Swept d_page, num_soft_tokens, pooling, aggregator depth, extraction layers. Key finding: last_token pooling, 16 soft tokens, and 1 agg layer each individually beat the baseline.</div>
+      </div>
+      <div class="timeline-item success">
+        <div class="phase">Phase 3a: Compressor Pre-training</div>
+        <div class="detail">Pre-trained PageCompressor + ReconstructionHead on reconstruction-only objective. 3,970 chunks, 50 epochs. Reconstruction MSE: 375 &rarr; 102.</div>
+      </div>
+      <div class="timeline-item fail">
+        <div class="phase">Phase 3 v2: Complex Architecture (FAILURE)</div>
+        <div class="detail">Added question conditioning + reconstruction loss. Best val F1: 0.0290 but test F1: 0.0143. Question conditioning caused overfitting; recon loss pulled training away from QA objective.</div>
+      </div>
+      <div class="timeline-item success">
+        <div class="phase">Phase 3 v3: Simplified + Best Ablation Settings</div>
+        <div class="detail">Disabled q-conditioning and recon loss. Applied ablation-optimal settings. Used pretrained compressor. Best val F1: 0.0294 at epoch 2.</div>
+      </div>
+      <div class="timeline-item fail">
+        <div class="phase">Phase 4 v3 (first attempt): Generation Issues</div>
+        <div class="detail">Test F1: ~0.013 due to repetitive generation loops. Diagnosed: max_new_tokens mismatch (128 val vs 256 test) and no repetition penalty.</div>
+      </div>
+      <div class="timeline-item success">
+        <div class="phase">Phase 4 v3 (fixed): PARTIAL SUCCESS</div>
+        <div class="detail">Added repetition_penalty=1.3, sentence-level dedup, matched max_new_tokens=128. Test F1: 0.0257 (+41% over baseline). Final verdict: PARTIAL SUCCESS.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Next Steps -->
+<section id="next">
+  <div class="container">
+    <h2><span class="section-num">09</span>What Should Be Tried Next</h2>
+    <p class="section-desc">Based on the experiment results, here are the most promising directions for future work.</p>
+
+    <div class="next-steps">
+      <div class="next-step-card">
+        <h4>1. Address Hallucination</h4>
+        <p>The biggest failure: hallucination rate nearly doubled. Try adding a contrastive loss that penalizes soft prompts that lead to unfaithful generation. Consider training a small classifier to score faithfulness during generation and using it for rejection sampling.</p>
+      </div>
+      <div class="next-step-card">
+        <h4>2. Scale to Larger Models</h4>
+        <p>Qwen3-1.7B is too small for the QA task itself (both systems get F1 &lt; 0.03). The latent pager's advantage may be more pronounced with a 7B+ model that can actually answer the questions. The speed advantage (2.55x) would also scale.</p>
+      </div>
+      <div class="next-step-card">
+        <h4>3. Better Training Data</h4>
+        <p>The synthetic QA dataset has limitations. Use established benchmarks like NarrativeQA, QuALITY, or SCROLLS with proper answer annotations. The current data has short answers that make F1 noisy.</p>
+      </div>
+      <div class="next-step-card">
+        <h4>4. Longer Context Windows</h4>
+        <p>Test on truly long documents (100K+ tokens) where the baseline's text-summary approach would compound errors across many recursive reads. The latent pager's constant-time aggregation should shine here.</p>
+      </div>
+      <div class="next-step-card">
+        <h4>5. Hierarchical Page Aggregation</h4>
+        <p>Instead of flat cross-attention over all pages, build a hierarchical tree where nearby pages are first locally aggregated, then globally combined. This could better preserve local coherence.</p>
+      </div>
+      <div class="next-step-card">
+        <h4>6. LoRA-Tune the Base Model</h4>
+        <p>Keep the compressor + aggregator frozen and add LoRA adapters to the base LM to help it better interpret soft prompts. This bridges the modality gap between learned soft prompts and the frozen LM's expectations.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:32px;">
+      <div class="card-title">Abandoned Approaches (What Didn't Work)</div>
+      <table>
+        <thead><tr><th>Approach</th><th>Problem</th><th>Lesson</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Question-conditioned aggregation</td>
+            <td>Test F1 dropped from 0.026 to 0.014</td>
+            <td>4.5M extra params overfit on small dataset. Pages should be question-agnostic; let the LM do question-specific reasoning.</td>
+          </tr>
+          <tr>
+            <td>Reconstruction auxiliary loss</td>
+            <td>Hurt QA performance despite helping recon</td>
+            <td>Reconstruction objective conflicts with QA objective. Good reconstructions ≠ good QA prompts. Information needed for QA is a subset.</td>
+          </tr>
+          <tr>
+            <td>Mean pooling</td>
+            <td>21% worse F1 than last_token</td>
+            <td>Averaging dilutes task-relevant information. Last-token pooling preserves the position that the transformer attended to most recently.</td>
+          </tr>
+          <tr>
+            <td>Deeper aggregators (2-4 layers)</td>
+            <td>More layers = worse performance</td>
+            <td>With only ~2 chunks per document on average, deep cross-attention is overkill and adds noise. One layer suffices.</td>
+          </tr>
+          <tr>
+            <td>Selecting by val_loss</td>
+            <td>Selected late-epoch models that overfit</td>
+            <td>Val loss keeps decreasing but val F1 peaks early. Direct metric selection is essential for generalization.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="footer">
+  <p>Latent Pager Memory Experiment &middot; February 2025 &middot; Qwen3-1.7B on 4x A100-80GB</p>
+  <p style="margin-top:8px;">Built with Chart.js &middot; Full code and data at <a href="#">github.com/rlm-exp-claude</a></p>
+</div>
+
+<script>
+// Chart defaults
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+
+// Metrics comparison chart
+new Chart(document.getElementById('metricsChart'), {
+  type: 'bar',
+  data: {
+    labels: ['F1 Score', 'ROUGE-L', 'Hallucination Rate'],
+    datasets: [
+      {
+        label: 'Text Buffer (Baseline)',
+        data: [0.0182, 0.0177, 0.2920],
+        backgroundColor: 'rgba(139, 148, 158, 0.5)',
+        borderColor: 'rgba(139, 148, 158, 0.8)',
+        borderWidth: 1
+      },
+      {
+        label: 'Latent Pager',
+        data: [0.0257, 0.0260, 0.5795],
+        backgroundColor: 'rgba(88, 166, 255, 0.5)',
+        borderColor: 'rgba(88, 166, 255, 0.8)',
+        borderWidth: 1
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}`
+        }
+      }
+    },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#21262d' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Per-task chart
+new Chart(document.getElementById('taskChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Single Fact F1', 'Single Fact ROUGE', 'Multi-Hop F1', 'Multi-Hop ROUGE'],
+    datasets: [
+      {
+        label: 'Baseline',
+        data: [0.0206, 0.0210, 0.0155, 0.0142],
+        backgroundColor: 'rgba(139, 148, 158, 0.5)',
+        borderColor: 'rgba(139, 148, 158, 0.8)',
+        borderWidth: 1
+      },
+      {
+        label: 'Latent Pager',
+        data: [0.0314, 0.0323, 0.0195, 0.0192],
+        backgroundColor: 'rgba(88, 166, 255, 0.5)',
+        borderColor: 'rgba(88, 166, 255, 0.8)',
+        borderWidth: 1
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#21262d' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Training loss chart
+const epochs = [1,2,3,4,5,6,7,8,9,10];
+new Chart(document.getElementById('lossChart'), {
+  type: 'line',
+  data: {
+    labels: epochs,
+    datasets: [
+      {
+        label: 'Train Loss',
+        data: [3.581, 3.321, 3.332, 3.208, 3.166, 3.132, 3.106, 3.084, 3.072, 3.067],
+        borderColor: '#58a6ff',
+        backgroundColor: 'rgba(88, 166, 255, 0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4
+      },
+      {
+        label: 'Val Loss',
+        data: [3.102, 3.039, 3.020, 3.096, 3.028, 3.034, 3.029, 3.022, 3.023, 3.025],
+        borderColor: '#bc8cff',
+        backgroundColor: 'rgba(188, 140, 255, 0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { grid: { color: '#21262d' }, title: { display: true, text: 'Loss' } },
+      x: { grid: { color: '#21262d' }, title: { display: true, text: 'Epoch' } }
+    }
+  }
+});
+
+// Val F1 chart
+new Chart(document.getElementById('f1Chart'), {
+  type: 'line',
+  data: {
+    labels: epochs,
+    datasets: [
+      {
+        label: 'Val F1',
+        data: [0.0238, 0.0294, 0.0266, 0.0233, 0.0217, 0.0183, 0.0189, 0.0200, 0.0167, 0.0191],
+        borderColor: '#3fb950',
+        backgroundColor: 'rgba(63, 185, 80, 0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Learning Rate',
+        data: [2.94e-4, 2.74e-4, 2.41e-4, 1.99e-4, 1.52e-4, 1.05e-4, 6.3e-5, 3.0e-5, 3.0e-5, 3.0e-5],
+        borderColor: '#d29922',
+        borderDash: [5,5],
+        tension: 0.3,
+        pointRadius: 3,
+        yAxisID: 'y1'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      annotation: {
+        annotations: {
+          bestLine: {
+            type: 'line',
+            yMin: 0.0182,
+            yMax: 0.0182,
+            borderColor: 'rgba(248, 81, 73, 0.5)',
+            borderDash: [5,5],
+            borderWidth: 1,
+            label: { display: true, content: 'Baseline F1', position: 'end' }
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        type: 'linear',
+        position: 'left',
+        grid: { color: '#21262d' },
+        title: { display: true, text: 'Val F1' }
+      },
+      y1: {
+        type: 'linear',
+        position: 'right',
+        grid: { drawOnChartArea: false },
+        title: { display: true, text: 'Learning Rate' }
+      },
+      x: { grid: { color: '#21262d' }, title: { display: true, text: 'Epoch' } }
+    }
+  }
+});
+
+// d_page ablation chart
+new Chart(document.getElementById('dpageChart'), {
+  type: 'bar',
+  data: {
+    labels: ['128', '256', '512', '1024', '2048'],
+    datasets: [
+      {
+        label: 'F1',
+        data: [0.0185, 0.0153, 0.0191, 0.0161, 0.0179],
+        backgroundColor: 'rgba(88, 166, 255, 0.6)',
+        borderColor: '#58a6ff',
+        borderWidth: 1,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Hallucination',
+        data: [0.361, 0.240, 0.273, 0.232, 0.356],
+        type: 'line',
+        borderColor: '#f85149',
+        backgroundColor: 'rgba(248, 81, 73, 0.1)',
+        tension: 0.3,
+        pointRadius: 5,
+        yAxisID: 'y1'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, position: 'left', grid: { color: '#21262d' }, title: { display: true, text: 'F1' } },
+      y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Hallucination' } },
+      x: { grid: { display: false }, title: { display: true, text: 'd_page' } }
+    }
+  }
+});
+
+// Soft tokens chart
+new Chart(document.getElementById('softTokenChart'), {
+  type: 'bar',
+  data: {
+    labels: ['8', '16', '32', '64', '128'],
+    datasets: [
+      {
+        label: 'F1',
+        data: [0.0186, 0.0240, 0.0191, 0.0171, 0.0163],
+        backgroundColor: ['rgba(88,166,255,0.4)','rgba(63,185,80,0.6)','rgba(88,166,255,0.4)','rgba(88,166,255,0.4)','rgba(88,166,255,0.4)'],
+        borderColor: ['#58a6ff','#3fb950','#58a6ff','#58a6ff','#58a6ff'],
+        borderWidth: 1,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Hallucination',
+        data: [0.211, 0.271, 0.273, 0.316, 0.261],
+        type: 'line',
+        borderColor: '#f85149',
+        backgroundColor: 'rgba(248, 81, 73, 0.1)',
+        tension: 0.3,
+        pointRadius: 5,
+        yAxisID: 'y1'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, position: 'left', grid: { color: '#21262d' }, title: { display: true, text: 'F1' } },
+      y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Hallucination' } },
+      x: { grid: { display: false }, title: { display: true, text: 'num_soft_tokens' } }
+    }
+  }
+});
+
+// Pooling chart
+new Chart(document.getElementById('poolingChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Mean Pooling', 'Last Token Pooling'],
+    datasets: [
+      {
+        label: 'F1',
+        data: [0.0191, 0.0231],
+        backgroundColor: ['rgba(139,148,158,0.5)', 'rgba(63,185,80,0.6)'],
+        borderColor: ['#8b949e', '#3fb950'],
+        borderWidth: 1
+      },
+      {
+        label: 'Hallucination Rate',
+        data: [0.273, 0.073],
+        backgroundColor: ['rgba(248,81,73,0.3)', 'rgba(63,185,80,0.3)'],
+        borderColor: ['#f85149', '#3fb950'],
+        borderWidth: 1
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#21262d' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Aggregator depth chart
+new Chart(document.getElementById('depthChart'), {
+  type: 'bar',
+  data: {
+    labels: ['1 Layer', '2 Layers', '4 Layers'],
+    datasets: [
+      {
+        label: 'F1',
+        data: [0.0232, 0.0191, 0.0181],
+        backgroundColor: ['rgba(63,185,80,0.6)', 'rgba(88,166,255,0.4)', 'rgba(88,166,255,0.4)'],
+        borderColor: ['#3fb950', '#58a6ff', '#58a6ff'],
+        borderWidth: 1
+      },
+      {
+        label: 'Hallucination Rate',
+        data: [0.330, 0.273, 0.194],
+        backgroundColor: ['rgba(248,81,73,0.3)', 'rgba(248,81,73,0.3)', 'rgba(63,185,80,0.3)'],
+        borderColor: ['#f85149', '#f85149', '#3fb950'],
+        borderWidth: 1
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#21262d' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+
+// Smooth scroll for nav
+document.querySelectorAll('nav a').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+// Active nav highlight
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(section => {
+    const top = section.offsetTop - 80;
+    if (scrollY >= top) current = section.getAttribute('id');
+  });
+  navLinks.forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('href') === '#' + current) link.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>

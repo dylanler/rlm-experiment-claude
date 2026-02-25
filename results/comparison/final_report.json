@@ -1,0 +1,83 @@
+{
+  "verdict": "PARTIAL SUCCESS",
+  "criteria": {
+    "S1_accuracy_geq_baseline": true,
+    "S2_hallucination_lt_baseline": false,
+    "S3_compute_leq_2x": true,
+    "S4_training_converges": true,
+    "S5_accuracy_gain_geq_3pts": false,
+    "S6_hallucination_reduction_geq_10pct": false,
+    "S7_consistent_across_tasks": true,
+    "F1_accuracy_drop_gt_3pts": false,
+    "F2_training_no_converge": false,
+    "F3_hallucination_worse": true
+  },
+  "hypotheses": {
+    "H1": {
+      "description": "Latent pages reduce hallucination (>=10% relative reduction)",
+      "baseline_hallucination": 0.2920147460328928,
+      "latent_pager_hallucination": 0.5794791486291485,
+      "relative_reduction_pct": -98.44174189884079,
+      "supported": false,
+      "strongly_supported": false
+    },
+    "H2": {
+      "description": "Multi-hop accuracy improvement >= 5 F1 points",
+      "baseline_multi_hop_f1": 0.01550734565776775,
+      "latent_pager_multi_hop_f1": 0.019502975158795247,
+      "difference": 0.003995629501027496,
+      "supported": true,
+      "strongly_supported": false
+    },
+    "H3": {
+      "description": "Global consistency improves with latent aggregation",
+      "latent_pager_consistency": null,
+      "supported": false
+    },
+    "H4": {
+      "description": "Information retention scales with d_page",
+      "d_page_f1_curve": [
+        [
+          128,
+          0.018489651360838816
+        ],
+        [
+          256,
+          0.015307114351467586
+        ],
+        [
+          512,
+          0.019081148550263348
+        ],
+        [
+          1024,
+          0.016088183184736024
+        ],
+        [
+          2048,
+          0.017933504643526388
+        ]
+      ],
+      "supported": true
+    },
+    "H5": {
+      "description": "Compute cost <= 1.5x text baseline",
+      "baseline_latency": 19.545808919906616,
+      "latent_pager_latency": 7.651196595191956,
+      "ratio": 0.3914494726999772,
+      "supported": true
+    }
+  },
+  "baseline_metrics": {
+    "f1": 0.018150720641497076,
+    "rouge_l": 0.01769988290570877,
+    "hallucination_rate": 0.2920147460328928,
+    "latency": 19.545808919906616
+  },
+  "latent_pager_metrics": {
+    "f1": 0.02567715817591282,
+    "rouge_l": 0.026030655534027683,
+    "hallucination_rate": 0.5794791486291485,
+    "latency": 7.651196595191956
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "num_samples": 500,
+  "aggregate_metrics": {
+    "exact_match": {
+      "mean": 0.0,
+      "std": 0.0,
+      "median": 0.0
+    },
+    "f1": {
+      "mean": 0.02567715817591282,
+      "std": 0.04034193356502719,
+      "median": 0.019417475728155338
+    },
+    "rouge_l": {
+      "mean": 0.026030655534027683,
+      "std": 0.03306573663552698,
+      "median": 0.019801980198019802
+    },
+    "hallucination_rate": {
+      "mean": 0.5794791486291485,
+      "std": 0.24092187578237934,
+      "median": 0.6
+    }
+  },
+  "per_task_metrics": {
+    "single_fact_extraction": {
+      "exact_match": {
+        "mean": 0.0,
+        "count": 260
+      },
+      "f1": {
+        "mean": 0.031376404037867504,
+        "count": 260
+      },
+      "rouge_l": {
+        "mean": 0.03232385941649362,
+        "count": 260
+      },
+      "hallucination_rate": {
+        "mean": 0.6614922577422578,
+        "count": 260
+      }
+    },
+    "multi_hop_reasoning": {
+      "exact_match": {
+        "mean": 0.0,
+        "count": 240
+      },
+      "f1": {
+        "mean": 0.019502975158795247,
+        "count": 240
+      },
+      "rouge_l": {
+        "mean": 0.01921301799468959,
+        "count": 240
+      },
+      "hallucination_rate": {
+        "mean": 0.4906316137566138,
+        "count": 240
+      }
+    }
+  },
+  "total_time_seconds": 3825.598297595978,
+  "avg_latency_seconds": 7.651196595191956,
+  "peak_memory_gb": 1.8193984031677246
+}

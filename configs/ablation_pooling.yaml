@@ -1,0 +1,3 @@
+sweep:
+  parameter: "latent_extractor.pooling"
+  values: ["mean", "last_token"]

@@ -1,0 +1,52 @@
+{
+  "128": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.018489651360838816,
+      "rouge_l": 0.01905400433349582,
+      "hallucination_rate": 0.3611904761904762
+    },
+    "final_train_loss": 3.9779426783323286,
+    "final_val_loss": 4.071917330473662
+  },
+  "256": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.015307114351467586,
+      "rouge_l": 0.017787421570199895,
+      "hallucination_rate": 0.23968253968253972
+    },
+    "final_train_loss": 4.2311830321326855,
+    "final_val_loss": 4.006029368750751
+  },
+  "512": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.019081148550263348,
+      "rouge_l": 0.021137275994469948,
+      "hallucination_rate": 0.27314935064935064
+    },
+    "final_train_loss": 3.9889413678646086,
+    "final_val_loss": 4.046113659068942
+  },
+  "1024": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.016088183184736024,
+      "rouge_l": 0.016891303612745785,
+      "hallucination_rate": 0.23193223443223443
+    },
+    "final_train_loss": 3.8467757105454803,
+    "final_val_loss": 3.3837674338370562
+  },
+  "2048": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.017933504643526388,
+      "rouge_l": 0.020884958862673463,
+      "hallucination_rate": 0.3558584471084472
+    },
+    "final_train_loss": 4.143096521347761,
+    "final_val_loss": 3.8760448023676872
+  }
+}

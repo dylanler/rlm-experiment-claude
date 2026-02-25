@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latent Pager Experiment Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 10px; color: #38bdf8; font-size: 1.8rem; }
+        .subtitle { text-align: center; color: #64748b; margin-bottom: 20px; font-size: 0.9rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+        .card h2 { color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+        .metric { font-size: 2.2rem; font-weight: 700; }
+        .metric.good { color: #4ade80; }
+        .metric.bad { color: #f87171; }
+        .metric.neutral { color: #fbbf24; }
+        .comparison { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
+        .status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .status-running { background: #1e3a5f; color: #38bdf8; }
+        .status-complete { background: #14532d; color: #4ade80; }
+        .status-failed { background: #7f1d1d; color: #f87171; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; padding: 8px 12px; background: #0f172a; color: #94a3b8; font-weight: 600; }
+        td { padding: 8px 12px; border-top: 1px solid #334155; }
+        tr:hover { background: #334155; }
+        .highlight { background: #1e3a5f !important; }
+        .chart-container { width: 100%; height: 250px; position: relative; }
+        canvas { width: 100% !important; height: 100% !important; }
+        .wide { grid-column: 1 / -1; }
+        .refresh-info { text-align: center; color: #475569; font-size: 0.75rem; margin-top: 10px; }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+        .epoch-chart { height: 300px; }
+        .bar { display: inline-block; height: 18px; border-radius: 3px; margin-right: 4px; vertical-align: middle; }
+        .progress-bar { background: #334155; border-radius: 8px; height: 8px; margin-top: 8px; overflow: hidden; }
+        .progress-fill { background: linear-gradient(90deg, #38bdf8, #818cf8); height: 100%; border-radius: 8px; transition: width 0.5s; }
+    </style>
+</head>
+<body>
+    <h1>Latent Pager Memory Experiment</h1>
+    <p class="subtitle">Qwen3-1.7B | Real-time experiment tracking | <span id="last-update"></span></p>
+
+    <!-- Key Metrics -->
+    <div class="grid">
+        <div class="card">
+            <h2>Baseline F1 (Target)</h2>
+            <div class="metric neutral" id="baseline-f1">--</div>
+            <div class="comparison">Text buffer baseline (chunk=1024)</div>
+        </div>
+        <div class="card">
+            <h2>Current Best LP F1 (Val)</h2>
+            <div class="metric" id="best-val-f1">--</div>
+            <div class="comparison" id="best-val-f1-detail">--</div>
+        </div>
+        <div class="card">
+            <h2>Latest Test F1</h2>
+            <div class="metric" id="test-f1">--</div>
+            <div class="comparison" id="test-f1-detail">--</div>
+        </div>
+        <div class="card">
+            <h2>Training Status</h2>
+            <div id="training-status" class="metric neutral">--</div>
+            <div class="comparison" id="training-detail">--</div>
+        </div>
+    </div>
+
+    <!-- Training Progress -->
+    <div class="grid">
+        <div class="card wide">
+            <h2>Training History (All Runs)</h2>
+            <div class="chart-container epoch-chart">
+                <canvas id="training-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Epoch Table & Ablations -->
+    <div class="two-col">
+        <div class="card">
+            <h2>Epoch Log (Latest Run)</h2>
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table id="epoch-table">
+                    <thead>
+                        <tr><th>Epoch</th><th>Train Loss</th><th>Val Loss</th><th>Val F1</th><th>Time</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Ablation Results (Best per Sweep)</h2>
+            <table id="ablation-table">
+                <thead>
+                    <tr><th>Factor</th><th>Best Value</th><th>F1</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="grid" style="margin-top: 16px;">
+        <div class="card wide">
+            <h2>System Comparison</h2>
+            <table id="comparison-table">
+                <thead>
+                    <tr><th>System</th><th>F1</th><th>ROUGE-L</th><th>Hallucination</th><th>Latency (s)</th><th>Memory (GB)</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Run History -->
+    <div class="grid" style="margin-top: 16px;">
+        <div class="card wide">
+            <h2>Training Run History</h2>
+            <table id="runs-table">
+                <thead>
+                    <tr><th>Run</th><th>Config</th><th>Epochs</th><th>Best Val F1</th><th>Test F1</th><th>Status</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <p class="refresh-info">Auto-refreshes every 30 seconds | <span id="refresh-countdown">30</span>s until next refresh</p>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        let chart = null;
+        let countdown = 30;
+
+        async function fetchJSON(url) {
+            try {
+                const res = await fetch(url + '?t=' + Date.now());
+                if (!res.ok) return null;
+                return await res.json();
+            } catch { return null; }
+        }
+
+        async function fetchText(url) {
+            try {
+                const res = await fetch(url + '?t=' + Date.now());
+                if (!res.ok) return null;
+                return await res.text();
+            } catch { return null; }
+        }
+
+        function parseEpochsFromLog(text) {
+            if (!text) return [];
+            const lines = text.split('\n');
+            const epochs = [];
+            for (const line of lines) {
+                const m = line.match(/Epoch (\d+)\/(\d+) \| Train Loss: ([\d.]+) \| Val Loss: ([\d.]+) \| Val F1: ([\d.]+) \| Time: ([\d.]+)s/);
+                if (m) {
+                    epochs.push({
+                        epoch: parseInt(m[1]),
+                        total: parseInt(m[2]),
+                        train_loss: parseFloat(m[3]),
+                        val_loss: parseFloat(m[4]),
+                        val_f1: parseFloat(m[5]),
+                        time: parseFloat(m[6])
+                    });
+                }
+            }
+            return epochs;
+        }
+
+        function parseRunningF1(text) {
+            if (!text) return [];
+            const lines = text.split('\n');
+            const points = [];
+            for (const line of lines) {
+                const m = line.match(/\[(\d+)\/(\d+)\] Running F1: ([\d.]+)/);
+                if (m) {
+                    points.push({ sample: parseInt(m[1]), total: parseInt(m[2]), f1: parseFloat(m[3]) });
+                }
+            }
+            return points;
+        }
+
+        async function refresh() {
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+            // Load data
+            const [ablations, baselineMetrics, lpMetrics, v2Log, v3Log, evalV2Log, history] = await Promise.all([
+                fetchJSON('/data/ablations/all_ablations.json'),
+                fetchJSON('/data/baseline/metrics.json'),
+                fetchJSON('/data/latent_pager/metrics.json'),
+                fetchText('/logs/phase3_v2_output.log'),
+                fetchText('/logs/phase3_v3_output.log'),
+                fetchText('/logs/phase4_v2_output.log'),
+                fetchJSON('/data/latent_pager/training_history.json'),
+            ]);
+
+            // Baseline F1
+            const blF1 = baselineMetrics?.['1024']?.aggregate_metrics?.f1?.mean;
+            if (blF1 !== undefined) {
+                document.getElementById('baseline-f1').textContent = blF1.toFixed(4);
+            }
+
+            // Parse epoch logs
+            const v2Epochs = parseEpochsFromLog(v2Log);
+            const v3Epochs = parseEpochsFromLog(v3Log);
+            const latestEpochs = v3Epochs.length > 0 ? v3Epochs : v2Epochs;
+            const allRuns = { v2: v2Epochs, v3: v3Epochs };
+
+            // Best Val F1 across all runs
+            let bestF1 = 0, bestRun = '', bestEpoch = 0;
+            for (const [run, epochs] of Object.entries(allRuns)) {
+                for (const e of epochs) {
+                    if (e.val_f1 > bestF1) {
+                        bestF1 = e.val_f1;
+                        bestRun = run;
+                        bestEpoch = e.epoch;
+                    }
+                }
+            }
+            const bestF1El = document.getElementById('best-val-f1');
+            bestF1El.textContent = bestF1.toFixed(4);
+            bestF1El.className = 'metric ' + (bestF1 > (blF1 || 0.018) ? 'good' : 'bad');
+            document.getElementById('best-val-f1-detail').textContent = `Run ${bestRun}, Epoch ${bestEpoch}`;
+
+            // Test F1
+            const testF1 = lpMetrics?.aggregate_metrics?.f1?.mean;
+            const testF1El = document.getElementById('test-f1');
+            if (testF1 !== undefined) {
+                testF1El.textContent = testF1.toFixed(4);
+                testF1El.className = 'metric ' + (testF1 > (blF1 || 0.018) ? 'good' : 'bad');
+                document.getElementById('test-f1-detail').textContent = `Test set (${lpMetrics?.num_samples || '?'} samples)`;
+            } else {
+                // Check running eval
+                const runningF1 = parseRunningF1(evalV2Log);
+                if (runningF1.length > 0) {
+                    const last = runningF1[runningF1.length - 1];
+                    testF1El.textContent = last.f1.toFixed(4);
+                    testF1El.className = 'metric neutral';
+                    document.getElementById('test-f1-detail').textContent = `Running... ${last.sample}/${last.total} samples`;
+                }
+            }
+
+            // Training status
+            const statusEl = document.getElementById('training-status');
+            const detailEl = document.getElementById('training-detail');
+            if (latestEpochs.length > 0) {
+                const last = latestEpochs[latestEpochs.length - 1];
+                if (last.epoch >= last.total) {
+                    statusEl.textContent = 'Complete';
+                    statusEl.className = 'metric good';
+                    detailEl.textContent = `${last.total} epochs finished`;
+                } else {
+                    statusEl.textContent = `Epoch ${last.epoch}/${last.total}`;
+                    statusEl.className = 'metric neutral';
+                    const pct = (last.epoch / last.total * 100).toFixed(0);
+                    detailEl.innerHTML = `${pct}% complete<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+                }
+            }
+
+            // Epoch table
+            const tbody = document.querySelector('#epoch-table tbody');
+            tbody.innerHTML = '';
+            for (const e of latestEpochs) {
+                const isBest = e.val_f1 === bestF1;
+                const row = document.createElement('tr');
+                if (isBest) row.className = 'highlight';
+                row.innerHTML = `<td>${e.epoch}/${e.total}</td><td>${e.train_loss.toFixed(4)}</td><td>${e.val_loss.toFixed(4)}</td><td style="color:${e.val_f1 > (blF1||0.018) ? '#4ade80' : '#f87171'}">${e.val_f1.toFixed(4)}</td><td>${(e.time/60).toFixed(1)}m</td>`;
+                tbody.appendChild(row);
+            }
+
+            // Ablation table
+            if (ablations) {
+                const aTbody = document.querySelector('#ablation-table tbody');
+                aTbody.innerHTML = '';
+                for (const [factor, values] of Object.entries(ablations)) {
+                    let bestVal = null, bestMetric = 0;
+                    for (const [val, data] of Object.entries(values)) {
+                        const f1 = data.metrics?.f1 || 0;
+                        if (f1 > bestMetric) { bestMetric = f1; bestVal = val; }
+                    }
+                    if (bestVal) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `<td>${factor}</td><td>${bestVal}</td><td style="color:${bestMetric > (blF1||0.018) ? '#4ade80' : '#fbbf24'}">${bestMetric.toFixed(4)}</td>`;
+                        aTbody.appendChild(row);
+                    }
+                }
+            }
+
+            // Comparison table
+            const cTbody = document.querySelector('#comparison-table tbody');
+            cTbody.innerHTML = '';
+            if (baselineMetrics?.['1024']) {
+                const bl = baselineMetrics['1024'];
+                const ba = bl.aggregate_metrics || {};
+                cTbody.innerHTML += `<tr><td>Text Buffer Baseline</td><td>${(ba.f1?.mean||0).toFixed(4)}</td><td>${(ba.rouge_l?.mean||0).toFixed(4)}</td><td>${(ba.hallucination_rate?.mean||0).toFixed(4)}</td><td>${(bl.avg_latency_seconds||0).toFixed(2)}</td><td>${(bl.peak_memory_gb||0).toFixed(2)}</td></tr>`;
+            }
+            if (lpMetrics) {
+                const la = lpMetrics.aggregate_metrics || {};
+                const f1Col = (la.f1?.mean||0) > (blF1||0.018) ? '#4ade80' : '#f87171';
+                cTbody.innerHTML += `<tr><td>Latent Pager (v2: q-cond + recon)</td><td style="color:${f1Col}">${(la.f1?.mean||0).toFixed(4)}</td><td>${(la.rouge_l?.mean||0).toFixed(4)}</td><td>${(la.hallucination_rate?.mean||0).toFixed(4)}</td><td>${(lpMetrics.avg_latency_seconds||0).toFixed(2)}</td><td>${(lpMetrics.peak_memory_gb||0).toFixed(2)}</td></tr>`;
+            }
+
+            // Run history table
+            const rTbody = document.querySelector('#runs-table tbody');
+            rTbody.innerHTML = '';
+            // V1: original run
+            rTbody.innerHTML += `<tr><td>v1 (original)</td><td>mean pool, 32 soft, 2 layers</td><td>20</td><td>--</td><td>0.0136</td><td><span class="status-badge status-failed">Failed</span></td></tr>`;
+            // V2: q-conditioning + recon
+            if (v2Epochs.length > 0) {
+                const bv2 = Math.max(...v2Epochs.map(e => e.val_f1));
+                rTbody.innerHTML += `<tr><td>v2 (q-cond + recon)</td><td>last_token, 16 soft, 1 layer, recon=0.3</td><td>${v2Epochs.length}</td><td>${bv2.toFixed(4)}</td><td>0.0143</td><td><span class="status-badge status-failed">Failed</span></td></tr>`;
+            }
+            // V3: simplified
+            if (v3Epochs.length > 0) {
+                const bv3 = Math.max(...v3Epochs.map(e => e.val_f1));
+                const last = v3Epochs[v3Epochs.length - 1];
+                const status = last.epoch >= last.total ? 'complete' : 'running';
+                rTbody.innerHTML += `<tr class="highlight"><td>v3 (simplified)</td><td>last_token, 16 soft, 1 layer, no recon, no q-cond</td><td>${v3Epochs.length}</td><td style="color:${bv3 > (blF1||0.018) ? '#4ade80' : '#fbbf24'}">${bv3.toFixed(4)}</td><td>--</td><td><span class="status-badge status-${status}">${status === 'running' ? 'Training...' : 'Complete'}</span></td></tr>`;
+            }
+
+            // Chart
+            updateChart(allRuns, blF1);
+        }
+
+        function updateChart(allRuns, baseline) {
+            const ctx = document.getElementById('training-chart').getContext('2d');
+            const datasets = [];
+            const colors = { v2: '#f87171', v3: '#38bdf8' };
+            const labels_set = new Set();
+
+            for (const [run, epochs] of Object.entries(allRuns)) {
+                if (epochs.length === 0) continue;
+                for (const e of epochs) labels_set.add(e.epoch);
+                datasets.push({
+                    label: `${run} Val F1`,
+                    data: epochs.map(e => ({ x: e.epoch, y: e.val_f1 })),
+                    borderColor: colors[run] || '#818cf8',
+                    backgroundColor: (colors[run] || '#818cf8') + '20',
+                    tension: 0.3,
+                    pointRadius: 4,
+                });
+                datasets.push({
+                    label: `${run} Train Loss (scaled)`,
+                    data: epochs.map(e => ({ x: e.epoch, y: e.train_loss / 1000 })),
+                    borderColor: (colors[run] || '#818cf8') + '60',
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    pointRadius: 2,
+                });
+            }
+
+            if (baseline) {
+                const maxEpoch = Math.max(...Array.from(labels_set), 1);
+                datasets.push({
+                    label: 'Baseline F1',
+                    data: [{ x: 0, y: baseline }, { x: maxEpoch, y: baseline }],
+                    borderColor: '#fbbf24',
+                    borderDash: [10, 5],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                });
+            }
+
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Epoch', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+                        y: { title: { display: true, text: 'Score', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#1e293b' }, min: 0 },
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+                    },
+                    interaction: { intersect: false, mode: 'nearest' },
+                }
+            });
+        }
+
+        // Initial load
+        refresh();
+
+        // Auto-refresh
+        setInterval(() => {
+            countdown--;
+            document.getElementById('refresh-countdown').textContent = countdown;
+            if (countdown <= 0) {
+                countdown = 30;
+                refresh();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

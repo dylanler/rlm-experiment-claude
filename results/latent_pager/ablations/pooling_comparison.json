@@ -1,0 +1,20 @@
+{
+  "mean": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.019081148550263348,
+      "rouge_l": 0.021137275994469948,
+      "hallucination_rate": 0.27314935064935064
+    },
+    "final_train_loss": 3.9889413678646086
+  },
+  "last_token": {
+    "metrics": {
+      "exact_match": 0.0,
+      "f1": 0.02307961759784768,
+      "rouge_l": 0.025229230441793725,
+      "hallucination_rate": 0.07295454545454545
+    },
+    "final_train_loss": 3.50540817046538
+  }
+}

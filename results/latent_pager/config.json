@@ -1,0 +1,28 @@
+{
+  "model_name": "Qwen/Qwen3-1.7B",
+  "d_model": 2048,
+  "d_page": 512,
+  "num_extraction_layers": 4,
+  "extraction_layers": [
+    7,
+    14,
+    21,
+    27
+  ],
+  "pooling": "last_token",
+  "num_soft_tokens": 16,
+  "num_agg_layers": 1,
+  "training": {
+    "learning_rate": 0.0003,
+    "weight_decay": 0.05,
+    "batch_size": 4,
+    "epochs": 10,
+    "warmup_steps": 200,
+    "gradient_clip": 1.0,
+    "patience": 8,
+    "min_delta": 0.001,
+    "lambda_recon": 0.0,
+    "use_question_conditioning": false
+  },
+  "total_trainable_params": 91616896
+}
